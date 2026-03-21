@@ -1,0 +1,56 @@
+# Environment variables
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+pip-wheel-metadata/
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Audio/TTS cache
+*.mp3
+*.wav
+*.ogg
+
+# Database / state files
+*.db
+*.sqlite
+*.sqlite3
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/

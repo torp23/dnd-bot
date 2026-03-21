@@ -1,0 +1,316 @@
+================================================================
+               DnD DISCORD BOT — COMMAND REFERENCE
+================================================================
+
+All commands start with ! (e.g. !roll, !join, !register)
+When the bot asks you a follow-up question, just type your
+answer in the same channel — no prefix needed.
+
+----------------------------------------------------------------
+RULES & GUIDELINES
+----------------------------------------------------------------
+
+1. CAMPAIGN RULES
+   - Only one campaign can be active at a time per bot instance.
+   - All registered players share the same campaign. Each
+     player's character is tied permanently to their Discord
+     account for that campaign.
+   - World notes and lore (!note) persist across sessions.
+     Conversation history is cleared at the end of each session.
+   - A campaign must be started with !startcampaign before any
+     DM interactions will work.
+
+2. CHARACTER RULES
+   - Each Discord user can only have one registered character
+     per campaign. Re-registering overwrites the previous one.
+   - D&D Beyond sheets must be set to PUBLIC before the bot
+     can import them (Share → Anyone with the link).
+   - The DM will refuse or redirect any action your character
+     cannot perform based on their current tracked state:
+       * Spells not in your known spell list
+       * Spell slots that are fully depleted
+       * Class features with no uses remaining
+       * Action types already spent this turn
+   - It is the player's responsibility to keep their tracked
+     spells, slots, features, and actions up to date during
+     play using the commands below.
+
+3. DICE RULES
+   - All dice rolls are posted to the designated text channel.
+   - The DM bot does NOT roll dice automatically. Players must
+     call !roll when the DM asks for one.
+   - Advantage and disadvantage are handled inside !roll —
+     there are no separate !adv or !dis commands.
+
+4. VOICE RULES
+   - The bot must be in the voice channel (!join or via
+     !startcampaign) to transcribe speech and speak responses.
+   - If the bot is not in voice, DM responses fall back to
+     a text embed in the log channel.
+   - Only one DM response plays at a time. If two players
+     speak simultaneously, responses queue up in order.
+
+5. END OF SESSION
+   - When !stopcampaign is confirmed, the bot sends every
+     registered player a direct message with their current
+     character sheet so they can update D&D Beyond.
+   - Players must have Discord DMs enabled to receive this.
+   - Session number increments automatically on stop.
+
+----------------------------------------------------------------
+CAMPAIGN COMMANDS
+----------------------------------------------------------------
+
+!newcampaign
+    Create a brand-new campaign. If a campaign is currently
+    active, it is saved and paused first — it is NOT deleted.
+    The bot will ask for a campaign name and starting location.
+
+!startcampaign
+    Show all saved campaigns and pick one to start or resume.
+    If no campaigns exist, walks you through creating one.
+    Type a number to load, "new" to create, or "cancel".
+    The bot joins your voice channel and speaks the opening.
+
+!stopcampaign
+    Pause the active campaign. Confirms with "yes" before
+    stopping. Saves all state, increments the session counter,
+    clears conversation history, and DMs every player their
+    current character sheet. Bot leaves voice automatically.
+
+----------------------------------------------------------------
+SESSION COMMANDS
+----------------------------------------------------------------
+
+!setchannel
+    Sets the current text channel as the dice/status log.
+    Dice rolls, player input echoes, and status messages
+    will all appear here.
+
+!join
+    Bot joins your current voice channel and starts listening
+    for player speech. Use this if !startcampaign was run
+    before everyone was in voice.
+
+!leave
+    Bot leaves the voice channel and stops listening.
+
+!startsession
+    Generates and speaks a fresh opening narration for the
+    current session. Useful for re-narrating the scene
+    without going through the full !startcampaign flow.
+
+!dm <text>
+    Send a text message directly to the DM. The bot will
+    speak the response in voice. Use this if you do not have
+    a microphone or want to test the DM without speaking.
+    Example: !dm I search the room for hidden doors
+
+!location <place>
+    Update the current location shown in the DM's context.
+    Example: !location The Underdark
+
+!note <lore>
+    Add a world or story note the DM will remember for the
+    rest of the campaign.
+    Example: !note The innkeeper is secretly working for the cult
+
+----------------------------------------------------------------
+DICE COMMANDS
+----------------------------------------------------------------
+
+!roll <die>
+    Start a guided dice roll. Valid dice:
+    d4  d6  d8  d10  d12  d20  d100
+
+    The bot will ask three follow-up questions:
+      1. How many dice? (type a number)
+      2. Roll type: adv / dis / normal
+      3. Modifier: e.g. +3, -2, or 0
+
+    Results are posted as an embed in the text channel.
+
+!stats
+    Roll a full ability score set using the standard method:
+    4d6, drop the lowest, repeated six times.
+    Results posted to text channel.
+
+----------------------------------------------------------------
+CHARACTER COMMANDS
+----------------------------------------------------------------
+
+!register <dndbeyond_url>
+    Import your character directly from D&D Beyond.
+    Pulls name, race, class, level, HP, known spells,
+    spell slots, and class features automatically.
+    Re-run after levelling up to re-sync your sheet.
+    Example: !register https://www.dndbeyond.com/characters/12345678
+
+!register <name> <race> <class>
+    Register a character manually.
+    Example: !register Thorin Dwarf Fighter
+
+!hp set <amount>      — Set your max and current HP
+!hp damage <amount>   — Take damage
+!hp heal <amount>     — Heal
+!hp show              — Show current HP
+
+!inventory show                  — Show your inventory
+!inventory add <item>            — Add an item
+!inventory remove <item>         — Remove an item
+
+!party
+    Show all registered players, their HP, class, level,
+    and the current campaign location.
+
+----------------------------------------------------------------
+LEVEL-UP COMMANDS
+----------------------------------------------------------------
+
+!level up
+    Gain one level. The bot posts an announcement in the
+    log channel listing every mechanical change at that
+    level for your class (features, spell slots, proficiency
+    bonus, hit die, etc.) sourced from Gemini.
+
+!level set <number>
+    Set your level to a specific number (1-20).
+    If the new level is higher than your current level,
+    the bot posts the full level-up announcement.
+    If lower, it sets silently with no announcement.
+
+Note: Re-syncing your D&D Beyond sheet with !register also
+detects level changes automatically and fires the announcement.
+
+----------------------------------------------------------------
+SPELL COMMANDS
+----------------------------------------------------------------
+
+!spell add <level> <name>
+    Learn a spell. Use level 0 for cantrips.
+    Example: !spell add 3 Fireball
+    Example: !spell add 0 Prestidigitation
+
+!spell remove <name>
+    Forget a spell.
+    Example: !spell remove Fireball
+
+!spell show
+    List all known spells grouped by level.
+
+!spell cast <name> [slot_level]
+    Cast a spell and consume the appropriate spell slot.
+    Optionally specify a higher slot level to upcast.
+    Will refuse if the spell is not known or no slots remain.
+    Example: !spell cast Fireball
+    Example: !spell cast Fireball 4   (upcast to level 4)
+
+----------------------------------------------------------------
+SPELL SLOT COMMANDS
+----------------------------------------------------------------
+
+!slot set <level> <max>
+    Set the maximum number of slots for a spell level.
+    Example: !slot set 3 2
+
+!slot use <level>
+    Manually consume one spell slot.
+    Example: !slot use 3
+
+!slot restore <level|all>
+    Restore spell slots for a specific level or all levels.
+    Example: !slot restore all
+    Example: !slot restore 3
+
+!slot show
+    Display all spell slot levels with a visual use bar.
+
+----------------------------------------------------------------
+CLASS FEATURE COMMANDS
+----------------------------------------------------------------
+
+!feature add <max_uses> <recharge> <name>
+    Add a class feature with limited uses.
+    Recharge must be: short, long, or none
+    Example: !feature add 1 short Action Surge
+    Example: !feature add 1 long Bardic Inspiration
+
+!feature use <name>
+    Expend one use of a feature.
+    Example: !feature use Action Surge
+
+!feature restore <name|short|long|all>
+    Restore uses. Pass "short" or "long" to restore all
+    features that recharge on that rest type.
+    Example: !feature restore short
+    Example: !feature restore all
+    Example: !feature restore Action Surge
+
+!feature show
+    List all class features with remaining uses and
+    recharge conditions.
+
+----------------------------------------------------------------
+ACTION ECONOMY COMMANDS
+----------------------------------------------------------------
+
+!action use <type>
+    Mark an action type as spent for this turn.
+    Types: action, bonus, reaction
+    Example: !action use bonus
+
+!action reset
+    Start a new turn — restores all action types.
+
+!action show
+    Show which action types are available or spent.
+
+----------------------------------------------------------------
+REST COMMANDS
+----------------------------------------------------------------
+
+!rest short
+    Take a short rest:
+    - Restores all features with "short" recharge
+    - Resets action economy
+
+!rest long
+    Take a long rest:
+    - Restores ALL spell slots to maximum
+    - Restores ALL features (short and long recharge)
+    - Resets HP to maximum
+    - Resets action economy
+
+----------------------------------------------------------------
+OTHER COMMANDS
+----------------------------------------------------------------
+
+!gamehelp
+    Show a quick-reference embed of all commands inside Discord.
+
+================================================================
+QUICK-START CHECKLIST
+================================================================
+
+First session ever:
+  [ ] Run !setchannel in your text channel
+  [ ] Run !newcampaign and follow the prompts
+  [ ] Each player runs !register (URL or name/race/class)
+  [ ] Each player sets HP with !hp set <max> if registering manually
+  [ ] Each player adds spells with !spell add if registering manually
+  [ ] Each player adds features with !feature add if registering manually
+  [ ] Everyone joins the voice channel
+  [ ] Run !startcampaign and choose your campaign
+  [ ] Play!
+
+Returning session:
+  [ ] Everyone joins the voice channel
+  [ ] Run !startcampaign and pick your campaign
+  [ ] Play!
+
+End of session:
+  [ ] Run !stopcampaign
+  [ ] Check your Discord DMs for your character sheet summary
+  [ ] Update your D&D Beyond sheet using the link in the DM
+
+================================================================
