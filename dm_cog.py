@@ -169,14 +169,15 @@ class DMCog(commands.Cog):
     # ─── Campaign Setup Helper ─────────────────────────────────────────────────
 
     async def _setup_new_campaign(self, ctx, activate: bool = True) -> bool:
-        """Interactive prompts to name a campaign and set the starting location.
+        """Interactive prompts to name a campaign, set the starting location, and capture backstory.
         activate=True marks the campaign active immediately (used by !startcampaign).
         activate=False just saves it for later (used by !newcampaign).
         Returns True on success, False if the user cancels or times out."""
         def check(m):
             return m.author == ctx.author and m.channel == ctx.channel
 
-        await ctx.send("What is the name of your campaign?")
+        # ── Campaign name ─────────────────────────────────────────────────────
+        await ctx.send("**Campaign Setup (1/3)** — What is the name of your campaign?")
         try:
             msg = await self.bot.wait_for("message", check=check, timeout=60.0)
             campaign_name = msg.content.strip()
@@ -188,15 +189,33 @@ class DMCog(commands.Cog):
             await ctx.send("Campaign setup cancelled — no name provided.")
             return False
 
-        await ctx.send("Where does the adventure begin? *(starting location)*")
+        # ── Starting location ─────────────────────────────────────────────────
+        await ctx.send("**Campaign Setup (2/3)** — Where does the adventure begin? *(starting location — e.g. 'a foggy dockside tavern in the city of Waterdeep')*")
         try:
             msg = await self.bot.wait_for("message", check=check, timeout=60.0)
             location = msg.content.strip() or "a mysterious tavern"
         except asyncio.TimeoutError:
             location = "a mysterious tavern"
 
+        # ── Backstory ─────────────────────────────────────────────────────────
+        await ctx.send(
+            "**Campaign Setup (3/3)** — Share any backstory or context for the DM AI.\n"
+            "This is great for continuing a manual campaign — include setting details, "
+            "major past events, villain motivations, party history, or anything else the DM should know.\n"
+            "*(Type `skip` or leave blank to start fresh)*"
+        )
+        try:
+            msg = await self.bot.wait_for("message", check=check, timeout=120.0)
+            backstory = msg.content.strip()
+        except asyncio.TimeoutError:
+            backstory = ""
+
+        if backstory.lower() == "skip":
+            backstory = ""
+
         self.state.campaign_name = campaign_name
         self.state.current_location = location
+        self.state.world_notes = f"Campaign Backstory:\n{backstory}" if backstory else ""
         self.state.campaign_active = activate
         self.state.save()
         return True
@@ -527,12 +546,18 @@ class DMCog(commands.Cog):
         if success:
             embed = discord.Embed(
                 title=f"{self.state.campaign_name} is ready!",
-                description=(
-                    f"Location: {self.state.current_location}\n\n"
-                    "Players can register with `!register`.\n"
-                    "Use `!startcampaign` when everyone is ready to begin."
-                ),
                 color=0x2ecc71,
+            )
+            embed.add_field(name="Starting Location", value=self.state.current_location, inline=False)
+            if self.state.world_notes:
+                preview = self.state.world_notes
+                if len(preview) > 200:
+                    preview = preview[:197] + "..."
+                embed.add_field(name="Backstory", value=preview, inline=False)
+            embed.add_field(
+                name="Next Steps",
+                value="Players can register with `!register`.\nUse `!startcampaign` when everyone is ready to begin.",
+                inline=False,
             )
             await ctx.send(embed=embed)
 
