@@ -10,16 +10,19 @@ A Discord bot that acts as an AI Dungeon Master for D&D 5e campaigns. It listens
 
 ```
 DnD Bot/
-├── bot.py            — Entry point. Loads all three cogs on ready.
-├── dm_cog.py         — Main cog. Campaign management, session control, voice,
-│                       Human DM private messaging, character registration, HP/inventory.
-├── character_cog.py  — Spell, slot, class feature, action economy, rest, and level-up commands.
-├── dice_cog.py       — Guided interactive dice rolling (!roll, !stats).
-├── dm_brain.py       — Gemini API interface. DM responses, session opener, level-up info.
-├── game_state.py     — All persistent state. Each campaign saved as campaigns/<id>.json.
-├── voice_listener.py — Per-player audio capture + Google Cloud STT transcription.
-├── tts.py            — gTTS text-to-speech → FFmpegOpusAudio for voice playback.
-├── dndbeyond.py      — D&D Beyond character import (stats, spells, features, slots).
+├── bot.py              — Entry point. Loads all three cogs on ready.
+├── dm_cog.py           — Main cog. Campaign management, session control, voice,
+│                         Human DM private messaging, character registration, HP/inventory.
+│                         Also owns !setup, !setchannel, !setvoice.
+├── character_cog.py    — Spell, slot, class feature, action economy, rest, and level-up commands.
+├── dice_cog.py         — Guided interactive dice rolling (!roll, !stats, !resetroll).
+├── dm_brain.py         — Gemini API interface. DM responses, session opener, level-up info.
+├── game_state.py       — All persistent state. Each campaign saved as campaigns/<id>.json.
+├── server_config.py    — Server-level settings (log channel ID, voice channel ID).
+│                         Saved as server_config.json (gitignored).
+├── voice_listener.py   — Per-player audio capture + Google Cloud STT transcription.
+├── tts.py              — gTTS text-to-speech → FFmpegOpusAudio for voice playback.
+├── dndbeyond.py        — D&D Beyond character import (stats, spells, features, slots).
 ├── requirements.txt
 ├── .env.example
 ├── README.md
@@ -69,6 +72,14 @@ DnD Bot/
 - `!action use/reset/show` — per-turn action economy.
 - `!rest short|long` — restores appropriate features, slots, HP.
 - `!level up` / `!level set <n>` — Gemini generates full mechanical level-up breakdown.
+
+### Server Setup (ServerConfig)
+- `server_config.py` — simple dataclass saved as `server_config.json` (gitignored). Stores `log_channel_id` and `voice_channel_id` as ints.
+- `DMCog.on_ready` — restores `self.log_channel` from saved ID after the bot connects.
+- `_join_voice` — prefers `config.voice_channel_id` over the user's current channel; falls back to user's channel if no config is set.
+- `!setup` — 2-step wizard: lists text channels → user picks → lists voice channels → user picks. Shows current values and allows `skip`.
+- `!setchannel` — sets current channel as log, now also persists to `server_config.json`.
+- `!setvoice` — lists voice channels by number; `none` clears the setting.
 
 ### Session Commands
 - `!join` / `!leave` — voice channel management.
@@ -129,7 +140,16 @@ Owner: torp23
 
 ## Last Worked On
 
-Added auto-roll system:
+Added server channel configuration (`server_config.py`):
+- `ServerConfig` saves `log_channel_id` and `voice_channel_id` to `server_config.json`.
+- `on_ready` in `DMCog` restores log channel on restart.
+- `_join_voice` prefers configured voice channel over user's current channel.
+- `!setup` — 2-step first-run wizard to pick log and voice channels from numbered lists.
+- `!setvoice` — standalone command to change the voice channel.
+- `!setchannel` now persists to `server_config.json`.
+- `server_config.json` added to `.gitignore`.
+
+Previously: Added auto-roll system:
 - Gemini system prompt updated to append `[AUTOROLL: player=X, dice=NdX, type=adv|dis|normal]` tags when calling for a roll.
 - `_parse_autoroll()` and `_build_autoroll_embed()` added as module-level helpers in `dm_cog.py`.
 - `_execute_autoroll()` method on `DMCog` rolls and posts embeds; handles `player=all` for initiative by rolling for every registered player.

@@ -45,6 +45,12 @@ logs/
 *.wav
 *.ogg
 
+# Server config (contains server-specific channel IDs)
+server_config.json
+
+# Campaign save files
+campaigns/
+
 # Database / state files
 *.db
 *.sqlite

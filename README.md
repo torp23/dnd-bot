@@ -76,6 +76,29 @@ python bot.py
 
 ## Usage
 
+### First-Time Server Setup
+
+When you first add the bot to your server, run `!setup` to configure the channels:
+
+```
+!setup
+```
+
+The bot will:
+1. List all text channels — pick the one for DM narration and dice roll results
+2. List all voice channels — pick the one the bot will join for sessions
+
+Both settings persist across restarts. You can re-run `!setup` any time to change them, or use:
+
+```
+!setchannel   — Make the current text channel the log channel
+!setvoice     — Pick a voice channel from a numbered list (type "none" to clear)
+```
+
+If no voice channel is configured, the bot falls back to joining whatever voice channel the command user is in.
+
+---
+
 ### Campaign Management
 
 Campaigns are saved as individual files and can be resumed across sessions.

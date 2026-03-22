@@ -14,6 +14,7 @@ from dm_brain import get_dm_response, start_session, announce_level_up
 from tts import generate_tts_source
 from dndbeyond import fetch_ddb_character
 from voice_listener import DnDVoiceSink
+from server_config import ServerConfig
 import os
 
 # Try to import voice_recv; warn if missing
@@ -99,9 +100,19 @@ class DMCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.state = GameState.load()
+        self.config = ServerConfig.load()
         self.log_channel: discord.TextChannel | None = None
         self.voice_client = None
         self._speaking_lock = asyncio.Lock()
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        """Restore persisted channel settings after bot connects."""
+        if self.config.log_channel_id:
+            ch = self.bot.get_channel(self.config.log_channel_id)
+            if isinstance(ch, discord.TextChannel):
+                self.log_channel = ch
+                print(f"[Config] Log channel restored: #{ch.name}")
 
     # ─── Helper ────────────────────────────────────────────────────────────────
 
@@ -202,7 +213,159 @@ class DMCog(commands.Cog):
     async def set_log_channel(self, ctx):
         """Set this channel as the DM log / dice roll channel."""
         self.log_channel = ctx.channel
-        await ctx.send(f"📜 This channel is now the DM log. Dice rolls and DM narration will appear here.")
+        self.config.log_channel_id = ctx.channel.id
+        self.config.save()
+        await ctx.send(f"This channel is now the DM log. Dice rolls and DM narration will appear here.")
+
+    # ─── Server Setup Commands ─────────────────────────────────────────────────
+
+    @commands.command(name="setup")
+    async def server_setup(self, ctx):
+        """First-time setup: pick the log text channel and voice channel from a list."""
+        def check(m):
+            return m.author == ctx.author and m.channel == ctx.channel
+
+        guild = ctx.guild
+        if not guild:
+            await ctx.send("This command must be used in a server.")
+            return
+
+        # ── Step 1: Pick text channel ─────────────────────────────────────────
+        text_channels = [c for c in guild.text_channels if c.permissions_for(guild.me).send_messages]
+        lines = [f"**{i}.** #{c.name}" for i, c in enumerate(text_channels, 1)]
+        current_log = f"#{self.log_channel.name}" if self.log_channel else "not set"
+        embed = discord.Embed(
+            title="Server Setup (1/2) — Log Channel",
+            description=(
+                f"Current: {current_log}\n\n"
+                + "\n".join(lines)
+                + "\n\nType a number to select, or `skip` to keep the current setting."
+            ),
+            color=0x3498db,
+        )
+        await ctx.send(embed=embed)
+
+        try:
+            msg = await self.bot.wait_for("message", check=check, timeout=60.0)
+            choice = msg.content.strip().lower()
+        except asyncio.TimeoutError:
+            await ctx.send("Setup cancelled — timed out.")
+            return
+
+        if choice != "skip":
+            try:
+                idx = int(choice) - 1
+                if not (0 <= idx < len(text_channels)):
+                    raise ValueError
+                self.log_channel = text_channels[idx]
+                self.config.log_channel_id = self.log_channel.id
+                self.config.save()
+            except ValueError:
+                await ctx.send("Invalid choice — log channel unchanged.")
+
+        # ── Step 2: Pick voice channel ────────────────────────────────────────
+        voice_channels = [c for c in guild.voice_channels if c.permissions_for(guild.me).connect]
+        lines = [f"**{i}.** {c.name}" for i, c in enumerate(voice_channels, 1)]
+        configured_vc = self.bot.get_channel(self.config.voice_channel_id)
+        current_voice = configured_vc.name if isinstance(configured_vc, discord.VoiceChannel) else "not set (joins user's channel)"
+        embed = discord.Embed(
+            title="Server Setup (2/2) — Voice Channel",
+            description=(
+                f"Current: {current_voice}\n\n"
+                + "\n".join(lines)
+                + "\n\nType a number to select, or `skip` to keep joining the user's channel."
+            ),
+            color=0x3498db,
+        )
+        await ctx.send(embed=embed)
+
+        try:
+            msg = await self.bot.wait_for("message", check=check, timeout=60.0)
+            choice = msg.content.strip().lower()
+        except asyncio.TimeoutError:
+            await ctx.send("Setup cancelled — timed out.")
+            return
+
+        if choice != "skip":
+            try:
+                idx = int(choice) - 1
+                if not (0 <= idx < len(voice_channels)):
+                    raise ValueError
+                vc = voice_channels[idx]
+                self.config.voice_channel_id = vc.id
+                self.config.save()
+            except ValueError:
+                await ctx.send("Invalid choice — voice channel unchanged.")
+
+        # ── Summary ───────────────────────────────────────────────────────────
+        log_name = f"#{self.log_channel.name}" if self.log_channel else "not set"
+        configured_vc = self.bot.get_channel(self.config.voice_channel_id)
+        voice_name = configured_vc.name if isinstance(configured_vc, discord.VoiceChannel) else "user's channel (default)"
+        embed = discord.Embed(
+            title="Setup complete!",
+            description=(
+                f"**Log channel:** {log_name}\n"
+                f"**Voice channel:** {voice_name}\n\n"
+                "Use `!newcampaign` to create your first campaign, or `!startcampaign` to resume one."
+            ),
+            color=0x2ecc71,
+        )
+        await ctx.send(embed=embed)
+
+    @commands.command(name="setvoice")
+    async def set_voice_channel(self, ctx):
+        """Pick the voice channel the bot will join for sessions."""
+        def check(m):
+            return m.author == ctx.author and m.channel == ctx.channel
+
+        guild = ctx.guild
+        if not guild:
+            await ctx.send("This command must be used in a server.")
+            return
+
+        voice_channels = [c for c in guild.voice_channels if c.permissions_for(guild.me).connect]
+        lines = [f"**{i}.** {c.name}" for i, c in enumerate(voice_channels, 1)]
+        configured_vc = self.bot.get_channel(self.config.voice_channel_id)
+        current = configured_vc.name if isinstance(configured_vc, discord.VoiceChannel) else "not set (joins user's channel)"
+
+        embed = discord.Embed(
+            title="Select Voice Channel",
+            description=(
+                f"Current: {current}\n\n"
+                + "\n".join(lines)
+                + "\n\nType a number to select, `none` to clear (bot will join the user's channel), or `cancel`."
+            ),
+            color=0x3498db,
+        )
+        await ctx.send(embed=embed)
+
+        try:
+            msg = await self.bot.wait_for("message", check=check, timeout=30.0)
+            choice = msg.content.strip().lower()
+        except asyncio.TimeoutError:
+            await ctx.send("Cancelled — timed out.")
+            return
+
+        if choice == "cancel":
+            await ctx.send("Cancelled.")
+            return
+
+        if choice == "none":
+            self.config.voice_channel_id = 0
+            self.config.save()
+            await ctx.send("Voice channel cleared — bot will join whatever channel you're in.")
+            return
+
+        try:
+            idx = int(choice) - 1
+            if not (0 <= idx < len(voice_channels)):
+                raise ValueError
+            vc = voice_channels[idx]
+            self.config.voice_channel_id = vc.id
+            self.config.save()
+            await ctx.send(f"Voice channel set to **{vc.name}**.")
+        except ValueError:
+            await ctx.send("Invalid choice — voice channel unchanged.")
 
     # ─── Session Commands ──────────────────────────────────────────────────────
 
@@ -426,13 +589,21 @@ class DMCog(commands.Cog):
             return False
 
     async def _join_voice(self, ctx) -> bool:
-        """Join the author's voice channel. Returns True if connected."""
+        """Join the configured or author's voice channel. Returns True if connected."""
         if self.voice_client and self.voice_client.is_connected():
             return True
-        if not ctx.author.voice:
+
+        # Prefer the configured voice channel; fall back to the author's current channel
+        channel = None
+        if self.config.voice_channel_id:
+            channel = self.bot.get_channel(self.config.voice_channel_id)
+            if not isinstance(channel, discord.VoiceChannel):
+                channel = None
+        if channel is None and ctx.author.voice:
+            channel = ctx.author.voice.channel
+        if channel is None:
             return False
 
-        channel = ctx.author.voice.channel
         if VOICE_RECV_AVAILABLE:
             self.voice_client = await channel.connect(cls=voice_recv.VoiceRecvClient)
             sink = DnDVoiceSink(on_transcript_callback=self.on_transcript)
@@ -877,9 +1048,11 @@ class DMCog(commands.Cog):
             "`!updateDM` — Assign or change the Human DM"
         ), inline=False)
         embed.add_field(name="🎙️ Session", value=(
-            "`!join` — Bot joins your voice channel\n"
+            "`!setup` — First-time setup: pick log and voice channels\n"
+            "`!setchannel` — Set this channel as the DM log\n"
+            "`!setvoice` — Pick the voice channel the bot will join\n"
+            "`!join` — Bot joins your (or the configured) voice channel\n"
             "`!leave` — Bot leaves voice\n"
-            "`!setchannel` — Set dice/status log channel\n"
             "`!startsession` — Regenerate opening narration\n"
             "`!dm <text>` — Send text to DM manually\n"
             "`!location <place>` — Update current location\n"

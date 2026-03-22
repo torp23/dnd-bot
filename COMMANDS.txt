@@ -58,6 +58,31 @@ RULES & GUIDELINES
    - Session number increments automatically on stop.
 
 ----------------------------------------------------------------
+SETUP COMMANDS (run these first when adding the bot)
+----------------------------------------------------------------
+
+!setup
+    Interactive first-time setup wizard. Run this as soon as
+    you add the bot to your server.
+      Step 1: Lists all text channels — pick one for DM logs
+              and dice roll results.
+      Step 2: Lists all voice channels — pick one for the bot
+              to join during sessions.
+    Settings are saved and restored on every restart.
+    Re-run any time to change either channel.
+
+!setchannel
+    Sets the current text channel as the DM log immediately.
+    Persists across restarts. Alternative to !setup step 1.
+
+!setvoice
+    Pick a voice channel from a numbered list. The bot will
+    join this channel when sessions start instead of requiring
+    users to be in voice. Type "none" to clear and revert to
+    joining whatever channel the user is in. Type "cancel" to
+    abort.
+
+----------------------------------------------------------------
 CAMPAIGN COMMANDS
 ----------------------------------------------------------------
 
@@ -100,11 +125,6 @@ CAMPAIGN COMMANDS
 ----------------------------------------------------------------
 SESSION COMMANDS
 ----------------------------------------------------------------
-
-!setchannel
-    Sets the current text channel as the dice/status log.
-    Dice rolls, player input echoes, and status messages
-    will all appear here.
 
 !join
     Bot joins your current voice channel and starts listening
@@ -324,10 +344,12 @@ OTHER COMMANDS
 QUICK-START CHECKLIST
 ================================================================
 
+First time adding the bot to a server:
+  [ ] Run !setup and pick your log channel and voice channel
+
 First session ever:
-  [ ] Run !setchannel in your text channel
-  [ ] Run !newcampaign and follow the 3 prompts
-      (name → location → backstory/skip)
+  [ ] Run !newcampaign and follow the 4 prompts
+      (name → location → backstory/skip → human DM/@mention/skip)
   [ ] Each player runs !register (URL or name/race/class)
   [ ] Each player sets HP with !hp set <max> if registering manually
   [ ] Each player adds spells with !spell add if registering manually
