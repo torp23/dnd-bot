@@ -81,7 +81,8 @@ DnD Bot/
 - `!gamehelp` — in-Discord command reference embed.
 
 ### Dice (DiceCog)
-- `!roll <die>` — guided 3-prompt roll: dice count → advantage/disadvantage/normal → modifier. Posts embed to text channel.
+- `!roll <die>` — guided 3-prompt roll: dice count → advantage/disadvantage/normal → modifier. Posts embed to text channel. Each prompt shows `!resetroll to cancel`.
+- `!resetroll` — cancels an in-progress roll at any step. Detected inside `wait_for` by checking if the message starts with `!resetroll` before parsing the input. Standalone command responds gracefully if no roll is active.
 - `!stats` — 4d6 drop lowest × 6.
 
 ### End-of-Session DMs
@@ -127,9 +128,8 @@ Owner: torp23
 
 ## Last Worked On
 
-Added the **Human DM** system:
-- `human_dm_id` and `human_dm_name` added to `GameState` (persisted to JSON).
-- Step 4 in `_setup_new_campaign()` prompts for a Human DM @mention.
-- `on_message` listener in `DMCog` handles private Discord DMs from the Human DM, appending them to `world_notes`.
-- `!humanDM` and `!updateDM` commands added.
-- `!gamehelp` and confirmation embed updated.
+Added `!resetroll` to `DiceCog`:
+- Each `wait_for` step in `!roll` now checks if the player typed `!resetroll` and exits early with "Roll cancelled."
+- Each step prompt mentions `!resetroll to cancel`.
+- Standalone `!resetroll` command responds gracefully when no roll is active.
+- README, COMMANDS, and CLAUDE.md kept in sync with all changes.

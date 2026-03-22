@@ -84,6 +84,8 @@ Campaigns are saved as individual files and can be resumed across sessions.
 !newcampaign      — Create a new campaign (existing campaigns are preserved)
 !startcampaign    — Show saved campaigns and start or resume one
 !stopcampaign     — Pause the campaign, save progress, and send session summaries to players
+!humanDM          — Show who the current Human DM is
+!updateDM         — Assign or change the Human DM
 ```
 
 **`!newcampaign` / `!startcampaign` setup flow:**
@@ -128,6 +130,16 @@ The character is permanently tied to your Discord account. Re-run at any time to
 ```
 Then set your HP: `!hp set 45`
 
+### Human DM
+
+A Human DM can privately message the bot to inject context and plot points that only the AI DM sees — other players never know.
+
+- Assign during `!newcampaign` setup (step 4) by @mentioning a user, or type `skip`
+- The Human DM sends a **Discord DM directly to the bot** at any time during the campaign
+- The bot confirms receipt and appends the note to the AI DM's context as `[Human DM] <note>`
+- `!humanDM` — show who the current Human DM is
+- `!updateDM` — reassign or remove the Human DM (@mention a user, type `none` to remove)
+
 ### Starting a Session
 
 1. Everyone joins the voice channel
@@ -152,8 +164,11 @@ The bot walks you through three prompts:
 2. Advantage / Disadvantage / Normal
 3. Modifier (e.g. `+3`, `-2`, `0`)
 
+Type `!resetroll` at any prompt to cancel the roll and start over.
+
 ```
-!stats   — Roll full ability score set (4d6 drop lowest x6)
+!stats      — Roll full ability score set (4d6 drop lowest x6)
+!resetroll  — Cancel an in-progress dice roll at any step
 ```
 
 **HP**

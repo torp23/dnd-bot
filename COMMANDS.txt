@@ -86,6 +86,17 @@ CAMPAIGN COMMANDS
     clears conversation history, and DMs every player their
     current character sheet. Bot leaves voice automatically.
 
+!humanDM
+    Show who the current Human DM is for the active campaign.
+
+!updateDM
+    Assign or change the Human DM. @mention the new DM,
+    type "none" to remove, or "cancel" to abort.
+    The Human DM can privately message the bot to add context
+    and plot points that only the AI DM will see.
+    Bot confirms receipt via DM and appends the note to
+    world context tagged as [Human DM].
+
 ----------------------------------------------------------------
 SESSION COMMANDS
 ----------------------------------------------------------------
@@ -142,6 +153,11 @@ DICE COMMANDS
     Roll a full ability score set using the standard method:
     4d6, drop the lowest, repeated six times.
     Results posted to text channel.
+
+!resetroll
+    Cancel an in-progress !roll at any step. Type this instead
+    of answering the current prompt to abort the roll entirely.
+    If no roll is active, the bot will say so.
 
 ----------------------------------------------------------------
 CHARACTER COMMANDS
