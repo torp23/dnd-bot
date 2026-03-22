@@ -114,6 +114,57 @@ class DMCog(commands.Cog):
                 self.log_channel = ch
                 print(f"[Config] Log channel restored: #{ch.name}")
 
+    @commands.Cog.listener()
+    async def on_guild_join(self, guild: discord.Guild):
+        """Send a welcome message when the bot is added to a server."""
+        # Prefer the server's system channel, then fall back to the first writable text channel
+        channel = guild.system_channel
+        if channel is None or not channel.permissions_for(guild.me).send_messages:
+            channel = next(
+                (c for c in guild.text_channels if c.permissions_for(guild.me).send_messages),
+                None,
+            )
+        if channel is None:
+            return
+
+        embed = discord.Embed(
+            title="D&D Bot is here!",
+            description=(
+                "I'm your AI-powered Dungeon Master. I'll listen to your players in voice, "
+                "narrate the world, enforce character rules, and roll dice automatically — "
+                "all powered by Google Gemini."
+            ),
+            color=0x8e44ad,
+        )
+        embed.add_field(
+            name="Step 1 — Run setup",
+            value=(
+                "Type `!setup` to choose which text channel I post to and which voice channel "
+                "I join for sessions. Do this before anything else."
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Step 2 — Create a campaign",
+            value="Type `!newcampaign` to set up your first campaign (name, location, backstory, and Human DM).",
+            inline=False,
+        )
+        embed.add_field(
+            name="Step 3 — Register characters",
+            value=(
+                "Each player runs `!register <dndbeyond_url>` to import their sheet, "
+                "or `!register <name> <race> <class>` for manual entry."
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Step 4 — Start playing",
+            value="Type `!startcampaign`, pick your campaign, and the adventure begins.",
+            inline=False,
+        )
+        embed.set_footer(text="Type !gamehelp at any time for a full command reference.")
+        await channel.send(embed=embed)
+
     # ─── Helper ────────────────────────────────────────────────────────────────
 
     async def speak_dm(self, text: str):

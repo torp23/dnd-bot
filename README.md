@@ -78,7 +78,9 @@ python bot.py
 
 ### First-Time Server Setup
 
-When you first add the bot to your server, run `!setup` to configure the channels:
+When you add the bot to your server it will automatically post a welcome message with a quick-start guide in the first available channel. Follow the steps in that message, or refer to the guide below.
+
+Run `!setup` to configure the channels:
 
 ```
 !setup

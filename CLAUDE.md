@@ -143,6 +143,7 @@ Owner: torp23
 Added server channel configuration (`server_config.py`):
 - `ServerConfig` saves `log_channel_id` and `voice_channel_id` to `server_config.json`.
 - `on_ready` in `DMCog` restores log channel on restart.
+- `on_guild_join` in `DMCog` — sends a welcome embed to the server's system channel (falls back to first writable text channel). Covers the 4-step quick-start and directs users to `!setup` first.
 - `_join_voice` prefers configured voice channel over user's current channel.
 - `!setup` — 2-step first-run wizard to pick log and voice channels from numbered lists.
 - `!setvoice` — standalone command to change the voice channel.
