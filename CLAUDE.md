@@ -132,7 +132,7 @@ GOOGLE_APPLICATION_CREDENTIALS   # path to Google Cloud service account JSON (fo
 
 ## GitHub
 
-Repository: https://github.com/torp23/dnd-bot
+Repository: https://github.com/torp23/dnd-bot-google
 Branch: master (protected — no force push or deletion)
 Owner: torp23
 
