@@ -86,9 +86,19 @@ Campaigns are saved as individual files and can be resumed across sessions.
 !stopcampaign     — Pause the campaign, save progress, and send session summaries to players
 ```
 
+**`!newcampaign` / `!startcampaign` setup flow:**
+
+Both commands walk through a 3-step campaign setup when creating a new campaign:
+
+1. **Campaign name** — what the campaign is called
+2. **Starting location** — where the adventure begins (e.g. *"a foggy dockside tavern in Waterdeep"*)
+3. **Backstory** *(optional, 2-minute window)* — free-form context for the DM AI: setting details, past events, villain motivations, party history, etc. Ideal for groups continuing a manual campaign with the bot. Type `skip` or leave blank to start fresh.
+
+The backstory is stored as a world note and included in every DM prompt, so the AI has full context from the very first scene.
+
 **`!startcampaign` flow:**
-- If no campaigns exist, the bot walks you through naming the campaign and setting the starting location
-- If campaigns exist, it shows a numbered list — pick one, or type `new` to create another
+- If no campaigns exist, the bot walks you through the 3-step setup above
+- If campaigns exist, it shows a numbered list — pick one to resume, or type `new` to create another
 - The bot joins your voice channel and speaks the opening narration
 
 **`!stopcampaign` flow:**

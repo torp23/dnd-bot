@@ -64,7 +64,15 @@ CAMPAIGN COMMANDS
 !newcampaign
     Create a brand-new campaign. If a campaign is currently
     active, it is saved and paused first — it is NOT deleted.
-    The bot will ask for a campaign name and starting location.
+    The bot walks through three prompts:
+      1. Campaign name
+      2. Starting location (e.g. "a foggy dockside tavern in Waterdeep")
+      3. Backstory (optional, 2-minute window) — share setting details,
+         past events, villain motivations, or party history so the DM AI
+         has full context from the start. Useful when continuing a manual
+         D&D campaign using the bot. Type "skip" or leave blank for a
+         fresh start.
+    Backstory is saved as a world note visible to the DM in every prompt.
 
 !startcampaign
     Show all saved campaigns and pick one to start or resume.
@@ -294,7 +302,8 @@ QUICK-START CHECKLIST
 
 First session ever:
   [ ] Run !setchannel in your text channel
-  [ ] Run !newcampaign and follow the prompts
+  [ ] Run !newcampaign and follow the 3 prompts
+      (name → location → backstory/skip)
   [ ] Each player runs !register (URL or name/race/class)
   [ ] Each player sets HP with !hp set <max> if registering manually
   [ ] Each player adds spells with !spell add if registering manually
