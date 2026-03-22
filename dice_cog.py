@@ -32,15 +32,24 @@ class DiceCog(commands.Cog):
         def check(m):
             return m.author == ctx.author and m.channel == ctx.channel
 
+        def _cancelled(msg):
+            return msg.content.strip().lower().startswith("!resetroll")
+
         TIMEOUT = 30.0
 
         # ── Step 1: Number of dice ────────────────────────────────────────────
-        embed = discord.Embed(description=f"How many **{die}** to roll?\n*(reply with a number)*", color=0x8e44ad)
+        embed = discord.Embed(
+            description=f"How many **{die}** to roll?\n*(reply with a number, or `!resetroll` to cancel)*",
+            color=0x8e44ad,
+        )
         embed.set_author(name=f"Rolling {die} — Step 1/3")
         await ctx.send(embed=embed)
 
         try:
             msg = await self.bot.wait_for("message", check=check, timeout=TIMEOUT)
+            if _cancelled(msg):
+                await ctx.send("Roll cancelled.")
+                return
             num_dice = max(1, min(100, int(msg.content.strip())))
         except asyncio.TimeoutError:
             await ctx.send("Roll cancelled — timed out waiting for number of dice.")
@@ -51,7 +60,7 @@ class DiceCog(commands.Cog):
 
         # ── Step 2: Roll type ────────────────────────────────────────────────
         embed = discord.Embed(
-            description="Roll type?\n`adv` — Advantage\n`dis` — Disadvantage\n`normal` — Normal",
+            description="Roll type?\n`adv` — Advantage\n`dis` — Disadvantage\n`normal` — Normal\n*(or `!resetroll` to cancel)*",
             color=0x8e44ad,
         )
         embed.set_author(name=f"Rolling {num_dice}{die} — Step 2/3")
@@ -59,6 +68,9 @@ class DiceCog(commands.Cog):
 
         try:
             msg = await self.bot.wait_for("message", check=check, timeout=TIMEOUT)
+            if _cancelled(msg):
+                await ctx.send("Roll cancelled.")
+                return
             content = msg.content.strip().lower()
             if content.startswith("adv"):
                 roll_type = "adv"
@@ -72,7 +84,7 @@ class DiceCog(commands.Cog):
 
         # ── Step 3: Modifier ─────────────────────────────────────────────────
         embed = discord.Embed(
-            description="Modifier?\n*(e.g. `+3`, `-2`, or `0`)*",
+            description="Modifier?\n*(e.g. `+3`, `-2`, or `0`, or `!resetroll` to cancel)*",
             color=0x8e44ad,
         )
         embed.set_author(name=f"Rolling {num_dice}{die} ({roll_type}) — Step 3/3")
@@ -80,6 +92,9 @@ class DiceCog(commands.Cog):
 
         try:
             msg = await self.bot.wait_for("message", check=check, timeout=TIMEOUT)
+            if _cancelled(msg):
+                await ctx.send("Roll cancelled.")
+                return
             modifier = int(msg.content.strip().lstrip("+"))
         except asyncio.TimeoutError:
             await ctx.send("Roll cancelled — timed out waiting for modifier.")
@@ -120,6 +135,11 @@ class DiceCog(commands.Cog):
             embed.add_field(name="Result", value=f"**{total}**{mod_str}", inline=True)
 
         await ctx.send(embed=embed)
+
+    @commands.command(name="resetroll")
+    async def reset_roll(self, ctx):
+        """Cancel an in-progress dice roll. Type this at any prompt during !roll."""
+        await ctx.send("No roll is currently waiting for your input.")
 
     @commands.command(name="stats")
     async def roll_stats(self, ctx):
