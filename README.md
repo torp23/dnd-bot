@@ -2,6 +2,12 @@
 
 A Discord bot that joins your voice channel, listens to your players via speech-to-text, uses Google Gemini to DM your campaign in real time, and **speaks the DM's response back into the voice channel**. The DM enforces character constraints — if a player tries to cast a spell they don't know or uses an action they've already spent, Gemini calls it out in-character. Dice rolls are posted to a text channel. Supports D&D Beyond character sheet import with automatic spell, feature, and slot syncing.
 
+**This bot is designed to run entirely on free service tiers.** Google Gemini, Google Cloud Speech-to-Text, and Discord all offer free access — no paid subscription is required to run a campaign. However, free tiers come with limits worth knowing:
+
+- **Google Cloud Speech-to-Text** — free tier includes ~60 minutes of transcription per month. Heavy voice use across multiple sessions will hit this cap. If you reach the limit, players can still use `!dm <text>` to send input as text instead of speaking.
+- **Google Gemini** — free tier has rate limits (requests per minute and per day). Very long sessions or rapid back-and-forth may occasionally trigger a cooldown.
+- **Text-to-speech (gTTS)** — uses Google Translate's TTS endpoint, which is free but not an official API. It may occasionally be slow or rate-limited under heavy use.
+
 ---
 
 ## Setup
