@@ -90,16 +90,17 @@ Campaigns are saved as individual files and can be resumed across sessions.
 
 **`!newcampaign` / `!startcampaign` setup flow:**
 
-Both commands walk through a 3-step campaign setup when creating a new campaign:
+Both commands walk through a 4-step campaign setup when creating a new campaign:
 
 1. **Campaign name** — what the campaign is called
 2. **Starting location** — where the adventure begins (e.g. *"a foggy dockside tavern in Waterdeep"*)
 3. **Backstory** *(optional, 2-minute window)* — free-form context for the DM AI: setting details, past events, villain motivations, party history, etc. Ideal for groups continuing a manual campaign with the bot. Type `skip` or leave blank to start fresh.
+4. **Human DM** *(optional)* — @mention a player to assign as the Human DM, or type `skip`. The Human DM can privately message the bot to add secret context and plot points the other players never see.
 
-The backstory is stored as a world note and included in every DM prompt, so the AI has full context from the very first scene.
+The backstory and any Human DM notes are included in every DM prompt, so the AI has full context from the very first scene.
 
 **`!startcampaign` flow:**
-- If no campaigns exist, the bot walks you through the 3-step setup above
+- If no campaigns exist, the bot walks you through the 4-step setup above
 - If campaigns exist, it shows a numbered list — pick one to resume, or type `new` to create another
 - The bot joins your voice channel and speaks the opening narration
 
@@ -134,7 +135,7 @@ Then set your HP: `!hp set 45`
 
 A Human DM can privately message the bot to inject context and plot points that only the AI DM sees — other players never know.
 
-- Assign during `!newcampaign` setup (step 4) by @mentioning a user, or type `skip`
+- Assigned during campaign setup (step 4 of `!newcampaign` / `!startcampaign`) by @mentioning a user, or type `skip`
 - The Human DM sends a **Discord DM directly to the bot** at any time during the campaign
 - The bot confirms receipt and appends the note to the AI DM's context as `[Human DM] <note>`
 - `!humanDM` — show who the current Human DM is
