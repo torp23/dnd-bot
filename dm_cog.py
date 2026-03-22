@@ -3,6 +3,8 @@ DM Cog — the main orchestrator.
 Handles joining voice, processing transcripts, and all DM-related commands.
 """
 import asyncio
+import random
+import re
 from datetime import datetime, timezone
 
 import discord
@@ -21,6 +23,56 @@ try:
 except ImportError:
     VOICE_RECV_AVAILABLE = False
     print("⚠️  discord-ext-voice-recv not installed. Voice listening disabled.")
+
+
+_AUTOROLL_RE = re.compile(
+    r'\[AUTOROLL:\s*player=([^,\]]+),\s*dice=(\d+)d(\d+),\s*type=(adv|dis|normal)\]',
+    re.IGNORECASE,
+)
+_AUTOROLL_STRIP_RE = re.compile(r'\[AUTOROLL:[^\]]*\]', re.IGNORECASE)
+_VALID_DIE_SIZES = {4, 6, 8, 10, 12, 20, 100}
+
+
+def _parse_autoroll(text: str):
+    """Return (player, num_dice, die_size, roll_type) or None if no tag found."""
+    m = _AUTOROLL_RE.search(text)
+    if not m:
+        return None
+    player = m.group(1).strip()
+    num_dice = max(1, min(100, int(m.group(2))))
+    die_size = int(m.group(3))
+    roll_type = m.group(4).lower()
+    if die_size not in _VALID_DIE_SIZES:
+        return None
+    return player, num_dice, die_size, roll_type
+
+
+def _build_autoroll_embed(player_name: str, num_dice: int, die_size: int, roll_type: str) -> discord.Embed:
+    """Roll dice and return a result embed."""
+    if roll_type in ("adv", "dis"):
+        set_a = [random.randint(1, die_size) for _ in range(num_dice)]
+        set_b = [random.randint(1, die_size) for _ in range(num_dice)]
+        total_a, total_b = sum(set_a), sum(set_b)
+        if roll_type == "adv":
+            kept, dropped = (set_a, set_b) if total_a >= total_b else (set_b, set_a)
+            color, label = 0x2ecc71, "Advantage"
+        else:
+            kept, dropped = (set_a, set_b) if total_a <= total_b else (set_b, set_a)
+            color, label = 0xe67e22, "Disadvantage"
+        total = sum(kept)
+        embed = discord.Embed(color=color)
+        embed.set_author(name=f"Auto Roll — {player_name} — {num_dice}d{die_size} ({label})")
+        embed.add_field(name="Kept", value=f"`{kept}`", inline=True)
+        embed.add_field(name="Dropped", value=f"~~`{dropped}`~~", inline=True)
+        embed.add_field(name="Result", value=f"**{total}**", inline=False)
+    else:
+        rolls = [random.randint(1, die_size) for _ in range(num_dice)]
+        total = sum(rolls)
+        embed = discord.Embed(color=0xe74c3c)
+        embed.set_author(name=f"Auto Roll — {player_name} — {num_dice}d{die_size}")
+        embed.add_field(name="Rolls", value=f"`{rolls}`", inline=True)
+        embed.add_field(name="Result", value=f"**{total}**", inline=True)
+    return embed
 
 
 def _time_ago(iso_str: str) -> str:
@@ -82,6 +134,22 @@ class DMCog(commands.Cog):
             self.voice_client.play(source, after=after)
             await done
 
+    async def _execute_autoroll(self, player: str, num_dice: int, die_size: int, roll_type: str):
+        """Roll dice automatically and post result embeds to the log channel."""
+        channel = self.log_channel
+        if not channel:
+            return
+
+        # "all" rolls for every registered player (e.g. initiative)
+        if player.lower() == "all":
+            names = [p["character_name"] for p in self.state.players.values()] or ["Everyone"]
+        else:
+            names = [player]
+
+        for name in names:
+            embed = _build_autoroll_embed(name, num_dice, die_size, roll_type)
+            await channel.send(embed=embed)
+
     async def on_transcript(self, user_id: int, username: str, transcript: str):
         """Called when a player's speech is transcribed."""
         if not transcript:
@@ -95,7 +163,11 @@ class DMCog(commands.Cog):
 
         # Get DM response from Gemini
         response = await get_dm_response(self.state, transcript, username)
-        await self.speak_dm(response)
+        autoroll = _parse_autoroll(response)
+        clean = _AUTOROLL_STRIP_RE.sub('', response).strip()
+        await self.speak_dm(clean)
+        if autoroll:
+            await self._execute_autoroll(*autoroll)
 
     # ─── Voice Commands ────────────────────────────────────────────────────────
 
@@ -150,7 +222,11 @@ class DMCog(commands.Cog):
         response = await get_dm_response(self.state, text, ctx.author.display_name)
         if self.log_channel:
             await self.log_channel.send(f"🗣️ **{ctx.author.display_name}:** {text}")
-        await self.speak_dm(response)
+        autoroll = _parse_autoroll(response)
+        clean = _AUTOROLL_STRIP_RE.sub('', response).strip()
+        await self.speak_dm(clean)
+        if autoroll:
+            await self._execute_autoroll(*autoroll)
 
     @commands.command(name="location")
     async def set_location(self, ctx, *, location: str):

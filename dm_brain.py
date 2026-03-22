@@ -2,9 +2,13 @@
 Interfaces with the Google Gemini API to act as Dungeon Master.
 """
 import os
+import re
 import discord
 import google.generativeai as genai
 from game_state import GameState
+
+# Strips AUTOROLL tags from text before storing in conversation history
+_AUTOROLL_STRIP_RE = re.compile(r'\[AUTOROLL:[^\]]*\]', re.IGNORECASE)
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
@@ -31,7 +35,21 @@ Constraint enforcement — this is important:
 - Be firm but in-character — don't break the fourth wall, frame corrections as the character realizing they can't do that
 
 When players do something that requires a dice roll, format it like:
-🎲 **[Player Name] needs to roll [Skill/Save/Attack] — DC [number]** (or "roll for initiative", etc.)
+🎲 **[Player Name] needs to roll [Skill/Save/Attack] — DC [number]**
+
+Then on the same line, append an AUTOROLL tag so the bot can roll automatically:
+[AUTOROLL: player=<character_name>, dice=<N>d<X>, type=<adv|dis|normal>]
+
+- Set type to adv if the character has advantage (e.g. from a spell, ability, or condition), dis for disadvantage, normal otherwise
+- Use "all" as the player name for initiative rolls (rolls for every player)
+- Valid dice: d4, d6, d8, d10, d12, d20, d100
+- Only include the tag when you are actually requesting a dice roll, never for general narration
+
+Examples:
+  🎲 **Thorin needs to roll Athletics — DC 14** [AUTOROLL: player=Thorin, dice=1d20, type=normal]
+  🎲 **Aria needs to roll Stealth — DC 12** [AUTOROLL: player=Aria, dice=1d20, type=adv]
+  🎲 **Roll for Initiative!** [AUTOROLL: player=all, dice=1d20, type=normal]
+  🎲 **Thorin rolls damage — Greataxe** [AUTOROLL: player=Thorin, dice=1d12, type=normal]
 
 Keep your responses focused and engaging. You're running a session for friends, not writing a novel.
 """
@@ -81,7 +99,8 @@ async def get_dm_response(state: GameState, player_input: str, player_name: str)
     except Exception as e:
         reply = f"*(The DM pauses, distracted by an otherworldly force... Error: {e})*"
 
-    state.add_to_history("model", reply)
+    # Strip the autoroll tag before storing in history so it doesn't pollute future context
+    state.add_to_history("model", _AUTOROLL_STRIP_RE.sub('', reply).strip())
     state.save()
     return reply
 

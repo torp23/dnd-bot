@@ -138,8 +138,16 @@ SESSION COMMANDS
 DICE COMMANDS
 ----------------------------------------------------------------
 
+AUTO-ROLL (no command needed)
+    When the AI DM calls for a roll during play, the bot
+    automatically rolls and posts the result embed to the
+    text channel. The DM determines the dice type, count,
+    and advantage/disadvantage based on context and the
+    player's character sheet. Works for single-player rolls
+    and initiative (rolls for all registered players).
+
 !roll <die>
-    Start a guided dice roll. Valid dice:
+    Start a guided manual dice roll. Valid dice:
     d4  d6  d8  d10  d12  d20  d100
 
     The bot will ask three follow-up questions:

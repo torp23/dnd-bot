@@ -80,9 +80,10 @@ DnD Bot/
 - `!party` — shows all registered players and their status.
 - `!gamehelp` — in-Discord command reference embed.
 
-### Dice (DiceCog)
-- `!roll <die>` — guided 3-prompt roll: dice count → advantage/disadvantage/normal → modifier. Posts embed to text channel. Each prompt shows `!resetroll to cancel`.
-- `!resetroll` — cancels an in-progress roll at any step. Detected inside `wait_for` by checking if the message starts with `!resetroll` before parsing the input. Standalone command responds gracefully if no roll is active.
+### Dice (DiceCog + DMCog auto-roll)
+- **Auto-roll** — after every DM response, `_parse_autoroll()` checks for an `[AUTOROLL: player=X, dice=NdX, type=adv|dis|normal]` tag injected by Gemini. If found, `_execute_autoroll()` rolls and posts a result embed to the log channel. For `player=all` (initiative), it rolls separately for every registered player. The tag is stripped from the text before TTS and before storing in conversation history.
+- `!roll <die>` — guided 3-prompt manual roll: dice count → advantage/disadvantage/normal → modifier. Posts embed to text channel. Each prompt shows `!resetroll to cancel`.
+- `!resetroll` — cancels an in-progress roll at any step. Detected inside `wait_for` by checking if the message starts with `!resetroll`. Standalone command responds gracefully if no roll is active.
 - `!stats` — 4d6 drop lowest × 6.
 
 ### End-of-Session DMs
@@ -128,8 +129,9 @@ Owner: torp23
 
 ## Last Worked On
 
-Added `!resetroll` to `DiceCog`:
-- Each `wait_for` step in `!roll` now checks if the player typed `!resetroll` and exits early with "Roll cancelled."
-- Each step prompt mentions `!resetroll to cancel`.
-- Standalone `!resetroll` command responds gracefully when no roll is active.
-- README, COMMANDS, and CLAUDE.md kept in sync with all changes.
+Added auto-roll system:
+- Gemini system prompt updated to append `[AUTOROLL: player=X, dice=NdX, type=adv|dis|normal]` tags when calling for a roll.
+- `_parse_autoroll()` and `_build_autoroll_embed()` added as module-level helpers in `dm_cog.py`.
+- `_execute_autoroll()` method on `DMCog` rolls and posts embeds; handles `player=all` for initiative by rolling for every registered player.
+- Tag is stripped before TTS (`speak_dm`) and before storing in Gemini conversation history.
+- Wired into both `on_transcript()` and `manual_dm_input()`.

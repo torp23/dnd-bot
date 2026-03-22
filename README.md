@@ -157,6 +157,12 @@ A Human DM can privately message the bot to inject context and plot points that 
 - `!location The Underdark` — update the current location in DM context
 
 **Dice (posted to text channel)**
+
+The bot can roll dice in two ways:
+
+**Auto-roll (recommended):** When the AI DM calls for a roll, it automatically rolls and posts the result. No command needed — just act and let the DM narrate. The DM determines the dice, count, and advantage/disadvantage from the character sheet context.
+
+**Manual roll:**
 ```
 !roll d20
 ```
