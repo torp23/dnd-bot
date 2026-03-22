@@ -213,9 +213,28 @@ class DMCog(commands.Cog):
         if backstory.lower() == "skip":
             backstory = ""
 
+        # ── Human DM assignment ───────────────────────────────────────────────
+        await ctx.send(
+            "**Campaign Setup (4/4)** — @mention the Human DM for this campaign, or type `skip`.\n"
+            "The Human DM can privately message the bot to add context and plot points "
+            "that only the AI DM will see."
+        )
+        human_dm_id = 0
+        human_dm_name = ""
+        try:
+            msg = await self.bot.wait_for("message", check=check, timeout=60.0)
+            if msg.content.strip().lower() != "skip" and msg.mentions:
+                human_dm = msg.mentions[0]
+                human_dm_id = human_dm.id
+                human_dm_name = human_dm.display_name
+        except asyncio.TimeoutError:
+            pass
+
         self.state.campaign_name = campaign_name
         self.state.current_location = location
         self.state.world_notes = f"Campaign Backstory:\n{backstory}" if backstory else ""
+        self.state.human_dm_id = human_dm_id
+        self.state.human_dm_name = human_dm_name
         self.state.campaign_active = activate
         self.state.save()
         return True
@@ -554,12 +573,78 @@ class DMCog(commands.Cog):
                 if len(preview) > 200:
                     preview = preview[:197] + "..."
                 embed.add_field(name="Backstory", value=preview, inline=False)
+            if self.state.human_dm_id:
+                embed.add_field(name="Human DM", value=self.state.human_dm_name, inline=False)
             embed.add_field(
                 name="Next Steps",
                 value="Players can register with `!register`.\nUse `!startcampaign` when everyone is ready to begin.",
                 inline=False,
             )
             await ctx.send(embed=embed)
+
+    @commands.command(name="humanDM")
+    async def show_human_dm(self, ctx):
+        """Show the current Human DM for the active campaign."""
+        if self.state.human_dm_id:
+            await ctx.send(f"The Human DM for **{self.state.campaign_name}** is **{self.state.human_dm_name}**.")
+        else:
+            await ctx.send(f"No Human DM is assigned to **{self.state.campaign_name}**. Use `!updateDM` to assign one.")
+
+    @commands.command(name="updateDM")
+    async def update_human_dm(self, ctx):
+        """Assign or change the Human DM. @mention the new DM or type 'none' to remove."""
+        def check(m):
+            return m.author == ctx.author and m.channel == ctx.channel
+
+        await ctx.send("@mention the new Human DM, type `none` to remove, or `cancel` to abort.")
+        try:
+            msg = await self.bot.wait_for("message", check=check, timeout=30.0)
+        except asyncio.TimeoutError:
+            await ctx.send("Cancelled — timed out.")
+            return
+
+        choice = msg.content.strip().lower()
+
+        if choice == "cancel":
+            await ctx.send("Cancelled.")
+            return
+
+        if choice == "none":
+            self.state.human_dm_id = 0
+            self.state.human_dm_name = ""
+            self.state.save()
+            await ctx.send("Human DM removed.")
+            return
+
+        if not msg.mentions:
+            await ctx.send("No user mentioned — cancelled.")
+            return
+
+        human_dm = msg.mentions[0]
+        self.state.human_dm_id = human_dm.id
+        self.state.human_dm_name = human_dm.display_name
+        self.state.save()
+        await ctx.send(f"**{human_dm.display_name}** is now the Human DM for **{self.state.campaign_name}**.")
+
+    # ─── Human DM private message listener ────────────────────────────────────
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        """Listen for private DMs from the Human DM and add them to world notes."""
+        if message.author.bot:
+            return
+        if not isinstance(message.channel, discord.DMChannel):
+            return
+        if not self.state.human_dm_id or message.author.id != self.state.human_dm_id:
+            return
+
+        note = message.content.strip()
+        if not note:
+            return
+
+        self.state.world_notes += f"\n[Human DM] {note}"
+        self.state.save()
+        await message.channel.send(f"Got it — added to campaign context for **{self.state.campaign_name}**.")
 
     # ─── Player Commands ───────────────────────────────────────────────────────
 
@@ -711,7 +796,9 @@ class DMCog(commands.Cog):
         embed.add_field(name="📖 Campaign", value=(
             "`!newcampaign` — Create a fresh campaign (wipes all data)\n"
             "`!startcampaign` — Start or resume a campaign\n"
-            "`!stopcampaign` — Pause campaign and save progress"
+            "`!stopcampaign` — Pause campaign and save progress\n"
+            "`!humanDM` — Show the current Human DM\n"
+            "`!updateDM` — Assign or change the Human DM"
         ), inline=False)
         embed.add_field(name="🎙️ Session", value=(
             "`!join` — Bot joins your voice channel\n"

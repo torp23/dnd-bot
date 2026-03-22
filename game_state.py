@@ -48,6 +48,8 @@ class GameState:
     world_notes: str = ""
     campaign_active: bool = False
     last_played: str = ""
+    human_dm_id: int = 0
+    human_dm_name: str = ""
 
     # ── Internal ─────────────────────────────────────────────────────────────
 
@@ -68,6 +70,8 @@ class GameState:
         self.world_notes = ""
         self.campaign_active = False
         self.last_played = ""
+        self.human_dm_id = 0
+        self.human_dm_name = ""
 
     def add_player(self, discord_id: int, discord_name: str):
         if str(discord_id) not in self.players:
@@ -156,6 +160,8 @@ class GameState:
                 "world_notes": self.world_notes,
                 "campaign_active": self.campaign_active,
                 "last_played": self.last_played,
+                "human_dm_id": self.human_dm_id,
+                "human_dm_name": self.human_dm_name,
             }, f, indent=2)
 
     @classmethod
@@ -173,6 +179,8 @@ class GameState:
         gs.world_notes = data.get("world_notes", "")
         gs.campaign_active = data.get("campaign_active", False)
         gs.last_played = data.get("last_played", "")
+        gs.human_dm_id = data.get("human_dm_id", 0)
+        gs.human_dm_name = data.get("human_dm_name", "")
         return gs
 
     @classmethod
