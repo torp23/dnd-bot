@@ -179,14 +179,20 @@ async def start_session(state: GameState) -> str:
 
     state.add_to_history("user", opener)
 
-    response = model.generate_content(
-        contents=state.conversation_history,
-        generation_config=genai.types.GenerationConfig(
-            temperature=0.9,
-            max_output_tokens=600,
+    try:
+        response = model.generate_content(
+            contents=state.conversation_history,
+            generation_config=genai.types.GenerationConfig(
+                temperature=0.9,
+                max_output_tokens=600,
+            )
         )
-    )
-    reply = response.text.strip()
+        reply = (response.text or "").strip()
+        if not reply:
+            reply = "*(The session begins, but the DM is momentarily speechless...)*"
+    except Exception as e:
+        reply = f"*(The DM pauses at the threshold, distracted by an otherworldly force... Error: {e})*"
+
     state.add_to_history("model", reply)
     state.save()
     return reply

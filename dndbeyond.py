@@ -91,8 +91,10 @@ def parse_character(data: dict) -> dict:
     # Classes — supports multiclass (e.g. "Fighter/Wizard")
     classes = data.get("classes") or []
     if classes:
-        char_class = "/".join(c["definition"]["name"] for c in classes)
-        level = sum(c["level"] for c in classes)
+        char_class = "/".join(
+            c.get("definition", {}).get("name", "Unknown") for c in classes
+        )
+        level = sum(c.get("level", 0) for c in classes)
     else:
         char_class = "Fighter"
         level = 1

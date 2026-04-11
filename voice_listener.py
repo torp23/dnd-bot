@@ -32,6 +32,7 @@ class PlayerAudioBuffer:
         self.buffer = bytearray()
         self.silent_frames = 0
         self.speaking = False
+        self.processing = False  # guard against duplicate task creation
         self.frames_per_check = int(SAMPLE_RATE * 0.02)  # 20ms frames
 
     def add_audio(self, pcm_data: bytes):
@@ -45,8 +46,10 @@ class PlayerAudioBuffer:
             self.buffer.extend(pcm_data)
             # If we've had enough silence after speech, process
             silence_secs = (self.silent_frames * 0.02)
-            if silence_secs >= SILENCE_DURATION:
-                asyncio.create_task(self._process_buffer())
+            if silence_secs >= SILENCE_DURATION and not self.processing:
+                self.processing = True
+                task = asyncio.create_task(self._process_buffer())
+                task.add_done_callback(lambda t: t.exception() if not t.cancelled() and t.exception() else None)
 
     async def _process_buffer(self):
         if len(self.buffer) < SAMPLE_RATE * SAMPLE_WIDTH * MIN_SPEECH_DURATION:
@@ -64,6 +67,7 @@ class PlayerAudioBuffer:
         self.buffer = bytearray()
         self.silent_frames = 0
         self.speaking = False
+        self.processing = False
 
 
 class DnDVoiceSink(voice_recv.AudioSink):
@@ -132,7 +136,7 @@ async def transcribe_audio(pcm_data: bytes) -> str | None:
         )
 
         # Run in executor to avoid blocking the event loop
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         response = await loop.run_in_executor(
             None,
             lambda: client.recognize(config=config, audio=audio)

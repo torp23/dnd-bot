@@ -204,7 +204,8 @@ class GameState:
                     "last_played": data.get("last_played", ""),
                     "campaign_active": data.get("campaign_active", False),
                 })
-            except Exception:
+            except Exception as e:
+                print(f"[State] Skipping corrupted campaign file {fname}: {e}")
                 continue
         summaries.sort(key=lambda x: x["last_played"], reverse=True)
         return summaries
