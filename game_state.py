@@ -3,11 +3,14 @@ Manages persistent game state: players, HP, inventory, location, and conversatio
 Each campaign is saved as its own JSON file under the campaigns/ directory.
 """
 import json
+import logging
 import os
 import uuid
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 CAMPAIGNS_DIR = "campaigns"
 LEGACY_STATE_FILE = "game_state.json"
@@ -72,6 +75,7 @@ class GameState:
         self.last_played = ""
         self.human_dm_id = 0
         self.human_dm_name = ""
+        logger.debug(f"[State] Campaign state reset (new id={self.campaign_id})")
 
     def add_player(self, discord_id: int, discord_name: str):
         if str(discord_id) not in self.players:
@@ -79,6 +83,7 @@ class GameState:
                 name=discord_name,
                 discord_id=discord_id
             ))
+            logger.info(f"[State] Player added: {discord_name} (id={discord_id})")
 
     def get_player(self, discord_id: int) -> Optional[dict]:
         return self.players.get(str(discord_id))
@@ -149,24 +154,34 @@ class GameState:
 
     def save(self):
         self.last_played = datetime.now(timezone.utc).isoformat()
-        with open(self._path(), "w") as f:
-            json.dump({
-                "campaign_id": self.campaign_id,
-                "campaign_name": self.campaign_name,
-                "current_location": self.current_location,
-                "session_number": self.session_number,
-                "players": self.players,
-                "conversation_history": self.conversation_history,
-                "world_notes": self.world_notes,
-                "campaign_active": self.campaign_active,
-                "last_played": self.last_played,
-                "human_dm_id": self.human_dm_id,
-                "human_dm_name": self.human_dm_name,
-            }, f, indent=2)
+        path = self._path()
+        try:
+            with open(path, "w") as f:
+                json.dump({
+                    "campaign_id": self.campaign_id,
+                    "campaign_name": self.campaign_name,
+                    "current_location": self.current_location,
+                    "session_number": self.session_number,
+                    "players": self.players,
+                    "conversation_history": self.conversation_history,
+                    "world_notes": self.world_notes,
+                    "campaign_active": self.campaign_active,
+                    "last_played": self.last_played,
+                    "human_dm_id": self.human_dm_id,
+                    "human_dm_name": self.human_dm_name,
+                }, f, indent=2)
+            logger.debug(
+                f"[State] Saved '{self.campaign_name}' "
+                f"(id={self.campaign_id}, session={self.session_number}, "
+                f"players={len(self.players)}, history={len(self.conversation_history)})"
+            )
+        except Exception as e:
+            logger.error(f"[State] Failed to save campaign '{self.campaign_name}' to {path}: {e}", exc_info=True)
 
     @classmethod
     def load_campaign(cls, campaign_id: str) -> "GameState":
         path = os.path.join(CAMPAIGNS_DIR, f"{campaign_id}.json")
+        logger.info(f"[State] Loading campaign id={campaign_id} from {path}")
         with open(path, "r") as f:
             data = json.load(f)
         gs = cls.__new__(cls)
@@ -181,6 +196,10 @@ class GameState:
         gs.last_played = data.get("last_played", "")
         gs.human_dm_id = data.get("human_dm_id", 0)
         gs.human_dm_name = data.get("human_dm_name", "")
+        logger.info(
+            f"[State] Loaded '{gs.campaign_name}' "
+            f"(session={gs.session_number}, players={len(gs.players)})"
+        )
         return gs
 
     @classmethod
@@ -205,9 +224,10 @@ class GameState:
                     "campaign_active": data.get("campaign_active", False),
                 })
             except Exception as e:
-                print(f"[State] Skipping corrupted campaign file {fname}: {e}")
+                logger.warning(f"[State] Skipping corrupted campaign file {fname}: {e}")
                 continue
         summaries.sort(key=lambda x: x["last_played"], reverse=True)
+        logger.debug(f"[State] Listed {len(summaries)} campaign(s)")
         return summaries
 
     @classmethod
@@ -215,6 +235,7 @@ class GameState:
         """Move an old single-file game_state.json into the campaigns directory."""
         if not os.path.exists(LEGACY_STATE_FILE):
             return
+        logger.info(f"[State] Migrating legacy {LEGACY_STATE_FILE}")
         try:
             with open(LEGACY_STATE_FILE, "r") as f:
                 data = json.load(f)
@@ -228,9 +249,9 @@ class GameState:
             gs.campaign_active = data.get("campaign_active", False)
             gs.save()
             os.rename(LEGACY_STATE_FILE, LEGACY_STATE_FILE + ".migrated")
-            print(f"[State] Migrated {LEGACY_STATE_FILE} → campaigns/{gs.campaign_id}.json")
+            logger.info(f"[State] Migrated {LEGACY_STATE_FILE} → campaigns/{gs.campaign_id}.json")
         except Exception as e:
-            print(f"[State] Legacy migration failed: {e}")
+            logger.error(f"[State] Legacy migration failed: {e}", exc_info=True)
 
     @classmethod
     def load(cls) -> "GameState":
@@ -240,6 +261,7 @@ class GameState:
         if campaigns:
             try:
                 return cls.load_campaign(campaigns[0]["id"])
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"[State] Failed to load most recent campaign: {e}", exc_info=True)
+        logger.info("[State] No existing campaign found — starting with blank state")
         return cls()

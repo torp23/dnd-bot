@@ -4,12 +4,15 @@ Uses discord.py's voice receive feature with a custom AudioSink.
 """
 import asyncio
 import io
+import logging
 import os
 import wave
 import struct
 import discord
 from discord.ext import voice_recv
 from google.cloud import speech
+
+logger = logging.getLogger(__name__)
 
 # Audio config — discord sends 48kHz stereo PCM
 SAMPLE_RATE = 48000
@@ -48,20 +51,33 @@ class PlayerAudioBuffer:
             silence_secs = (self.silent_frames * 0.02)
             if silence_secs >= SILENCE_DURATION and not self.processing:
                 self.processing = True
+                logger.debug(
+                    f"[Voice] Silence threshold reached for {self.username} "
+                    f"({len(self.buffer)} bytes buffered) — queuing STT"
+                )
                 task = asyncio.create_task(self._process_buffer())
                 task.add_done_callback(lambda t: t.exception() if not t.cancelled() and t.exception() else None)
 
     async def _process_buffer(self):
+        duration_secs = len(self.buffer) / (SAMPLE_RATE * SAMPLE_WIDTH * CHANNELS)
         if len(self.buffer) < SAMPLE_RATE * SAMPLE_WIDTH * MIN_SPEECH_DURATION:
+            logger.debug(
+                f"[Voice] Buffer for {self.username} too short "
+                f"({duration_secs:.2f}s < {MIN_SPEECH_DURATION}s) — skipping"
+            )
             self.reset()
             return
 
+        logger.info(f"[STT] Sending {duration_secs:.2f}s of audio for {self.username}")
         audio_data = bytes(self.buffer)
         self.reset()
 
         transcript = await transcribe_audio(audio_data)
         if transcript:
+            logger.info(f"[STT] {self.username}: {transcript!r}")
             await self.callback(self.user_id, self.username, transcript)
+        else:
+            logger.debug(f"[STT] No transcript returned for {self.username}")
 
     def reset(self):
         self.buffer = bytearray()
@@ -85,6 +101,7 @@ class DnDVoiceSink(voice_recv.AudioSink):
         if user is None:
             return
         if user.id not in self.player_buffers:
+            logger.debug(f"[Voice] New audio buffer created for {user.display_name} (id={user.id})")
             self.player_buffers[user.id] = PlayerAudioBuffer(
                 user_id=user.id,
                 username=user.display_name,
@@ -93,6 +110,7 @@ class DnDVoiceSink(voice_recv.AudioSink):
         self.player_buffers[user.id].add_audio(data.pcm)
 
     def cleanup(self):
+        logger.debug(f"[Voice] Sink cleanup — clearing {len(self.player_buffers)} player buffer(s)")
         self.player_buffers.clear()
 
 
@@ -145,6 +163,8 @@ async def transcribe_audio(pcm_data: bytes) -> str | None:
         if response.results:
             transcript = response.results[0].alternatives[0].transcript
             return transcript.strip()
+        else:
+            logger.debug("[STT] Google STT returned no results")
     except Exception as e:
-        print(f"STT Error: {e}")
+        logger.error(f"[STT] Transcription error: {e}", exc_info=True)
     return None

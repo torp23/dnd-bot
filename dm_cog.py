@@ -3,6 +3,7 @@ DM Cog — the main orchestrator.
 Handles joining voice, processing transcripts, and all DM-related commands.
 """
 import asyncio
+import logging
 import random
 import re
 from datetime import datetime, timezone
@@ -17,13 +18,15 @@ from voice_listener import DnDVoiceSink
 from server_config import ServerConfig
 import os
 
+logger = logging.getLogger(__name__)
+
 # Try to import voice_recv; warn if missing
 try:
     from discord.ext import voice_recv
     VOICE_RECV_AVAILABLE = True
 except ImportError:
     VOICE_RECV_AVAILABLE = False
-    print("⚠️  discord-ext-voice-recv not installed. Voice listening disabled.")
+    logger.warning("discord-ext-voice-recv not installed — voice listening disabled")
 
 
 _AUTOROLL_RE = re.compile(
@@ -112,7 +115,9 @@ class DMCog(commands.Cog):
             ch = self.bot.get_channel(self.config.log_channel_id)
             if isinstance(ch, discord.TextChannel):
                 self.log_channel = ch
-                print(f"[Config] Log channel restored: #{ch.name}")
+                logger.info(f"[Config] Log channel restored: #{ch.name} (id={ch.id})")
+            else:
+                logger.warning(f"[Config] Saved log_channel_id={self.config.log_channel_id} not found")
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild):
@@ -171,30 +176,34 @@ class DMCog(commands.Cog):
         """Speak a DM response in the voice channel via TTS.
         Falls back to a text embed if the bot is not in voice."""
         if not self.voice_client or not self.voice_client.is_connected():
-            # Fallback: post embed if no voice connection
+            logger.info("[DM] No voice connection — posting response as text embed")
             if self.log_channel:
                 embed = discord.Embed(description=text, color=0x8e44ad)
                 embed.set_author(name="Dungeon Master")
                 await self.log_channel.send(embed=embed)
             else:
-                print(f"[DM] {text}")
+                logger.warning("[DM] No log channel set — DM response has nowhere to go")
             return
 
         async with self._speaking_lock:
             try:
                 source = await generate_tts_source(text)
             except Exception as e:
-                print(f"[TTS Error] {e}")
+                logger.error(f"[TTS] Failed to generate audio: {e}", exc_info=True)
                 return
 
             loop = asyncio.get_running_loop()
             done = loop.create_future()
 
             def after(error):
+                if error:
+                    logger.error(f"[TTS] Playback error: {error}")
                 loop.call_soon_threadsafe(done.set_result, error)
 
+            logger.debug("[TTS] Starting voice playback")
             self.voice_client.play(source, after=after)
             await done
+            logger.debug("[TTS] Voice playback finished")
 
     async def _execute_autoroll(self, player: str, num_dice: int, die_size: int, roll_type: str):
         """Roll dice automatically and post result embeds to the log channel."""
@@ -217,15 +226,18 @@ class DMCog(commands.Cog):
         if not transcript:
             return
 
-        print(f"[STT] {username}: {transcript}")
+        logger.info(f"[Transcript] {username}: {transcript!r}")
 
         # Echo what was heard to the log channel
         if self.log_channel:
             await self.log_channel.send(f"🗣️ **{username}:** {transcript}")
 
         # Get DM response from Gemini
+        logger.debug(f"[DM] Requesting Gemini response for {username}")
         response = await get_dm_response(self.state, transcript, username)
         autoroll = _parse_autoroll(response)
+        if autoroll:
+            logger.info(f"[AutoRoll] Detected roll for player={autoroll[0]} dice={autoroll[1]}d{autoroll[2]} type={autoroll[3]}")
         clean = _AUTOROLL_STRIP_RE.sub('', response).strip()
         await self.speak_dm(clean)
         if autoroll:
@@ -237,10 +249,12 @@ class DMCog(commands.Cog):
     async def join_voice(self, ctx):
         """Join the voice channel and start listening."""
         if not ctx.author.voice:
+            logger.warning(f"[Voice] !join failed — {ctx.author} is not in a voice channel")
             await ctx.send("❌ You need to be in a voice channel first!")
             return
 
         if not VOICE_RECV_AVAILABLE:
+            logger.warning("[Voice] Joining without voice-recv — transcription unavailable")
             await ctx.send(
                 "⚠️ Voice listening requires `discord-ext-voice-recv`. "
                 "The bot can join but won't transcribe audio.\n"
@@ -254,8 +268,10 @@ class DMCog(commands.Cog):
     async def leave_voice(self, ctx):
         """Leave the voice channel."""
         if self.voice_client and self.voice_client.is_connected():
+            channel_name = getattr(self.voice_client.channel, "name", "unknown")
             await self.voice_client.disconnect()
             self.voice_client = None
+            logger.info(f"[Voice] Left voice channel: {channel_name}")
             await ctx.send("👋 Left the voice channel.")
         else:
             await ctx.send("❌ I'm not in a voice channel.")
@@ -266,6 +282,7 @@ class DMCog(commands.Cog):
         self.log_channel = ctx.channel
         self.config.log_channel_id = ctx.channel.id
         self.config.save()
+        logger.info(f"[Config] Log channel set to #{ctx.channel.name} (id={ctx.channel.id}) by {ctx.author}")
         await ctx.send(f"This channel is now the DM log. Dice rolls and DM narration will appear here.")
 
     # ─── Server Setup Commands ─────────────────────────────────────────────────
@@ -426,6 +443,10 @@ class DMCog(commands.Cog):
         if not self.log_channel:
             self.log_channel = ctx.channel
 
+        logger.info(
+            f"[Session] Starting session {self.state.session_number} of "
+            f"'{self.state.campaign_name}' — requested by {ctx.author}"
+        )
         await ctx.send("⏳ The Dungeon Master is preparing the session...")
         opening = await start_session(self.state)
         await self.speak_dm(opening)
@@ -433,10 +454,13 @@ class DMCog(commands.Cog):
     @commands.command(name="dm")
     async def manual_dm_input(self, ctx, *, text: str):
         """Manually send input to the DM (for players without mic or testing)."""
+        logger.info(f"[DM] Manual input from {ctx.author.display_name}: {text!r}")
         response = await get_dm_response(self.state, text, ctx.author.display_name)
         if self.log_channel:
             await self.log_channel.send(f"🗣️ **{ctx.author.display_name}:** {text}")
         autoroll = _parse_autoroll(response)
+        if autoroll:
+            logger.info(f"[AutoRoll] Detected roll for player={autoroll[0]} dice={autoroll[1]}d{autoroll[2]} type={autoroll[3]}")
         clean = _AUTOROLL_STRIP_RE.sub('', response).strip()
         await self.speak_dm(clean)
         if autoroll:
@@ -445,8 +469,10 @@ class DMCog(commands.Cog):
     @commands.command(name="location")
     async def set_location(self, ctx, *, location: str):
         """Update the current location (DM use)."""
+        old_location = self.state.current_location
         self.state.current_location = location
         self.state.save()
+        logger.info(f"[Campaign] Location updated: {old_location!r} → {location!r} by {ctx.author}")
         await ctx.send(f"📍 Location updated to: **{location}**")
 
     @commands.command(name="note")
@@ -454,6 +480,7 @@ class DMCog(commands.Cog):
         """Add a world/lore note the DM AI will remember."""
         self.state.world_notes += f"\n- {note}"
         self.state.save()
+        logger.info(f"[Campaign] World note added by {ctx.author}: {note!r}")
         await ctx.send(f"📝 Note added to world lore.")
 
     # ─── Campaign Setup Helper ─────────────────────────────────────────────────
@@ -527,6 +554,11 @@ class DMCog(commands.Cog):
         self.state.human_dm_name = human_dm_name
         self.state.campaign_active = activate
         self.state.save()
+        logger.info(
+            f"[Campaign] Created '{campaign_name}' (id={self.state.campaign_id}) — "
+            f"location='{location}' backstory={'yes' if backstory else 'no'} "
+            f"human_dm={human_dm_name or 'none'} active={activate}"
+        )
         return True
 
     async def _send_character_sheet_dm(self, player: dict, campaign_name: str, session_number: int) -> bool:
@@ -659,8 +691,10 @@ class DMCog(commands.Cog):
             self.voice_client = await channel.connect(cls=voice_recv.VoiceRecvClient)
             sink = DnDVoiceSink(on_transcript_callback=self.on_transcript)
             self.voice_client.listen(sink)
+            logger.info(f"[Voice] Joined '{channel.name}' with voice-recv listening active")
         else:
             self.voice_client = await channel.connect()
+            logger.info(f"[Voice] Joined '{channel.name}' (no voice-recv — listen-only)")
 
         await ctx.send(f"Joined **{channel.name}**.")
         return True
@@ -740,15 +774,18 @@ class DMCog(commands.Cog):
                     return
 
                 selected = campaigns[idx]
+                logger.info(f"[Campaign] Loading '{selected['name']}' (id={selected['id']}) — requested by {ctx.author}")
 
                 # Save current campaign if switching to a different one
                 if self.state.campaign_active and self.state.campaign_id != selected["id"]:
+                    logger.info(f"[Campaign] Pausing active campaign '{self.state.campaign_name}' before switch")
                     self.state.campaign_active = False
                     self.state.save()
 
                 try:
                     self.state = GameState.load_campaign(selected["id"])
-                except Exception:
+                except Exception as e:
+                    logger.error(f"[Campaign] Failed to load id={selected['id']}: {e}", exc_info=True)
                     await ctx.send("Failed to load that campaign — the file may be corrupted.")
                     return
 
@@ -799,9 +836,15 @@ class DMCog(commands.Cog):
         self.state.conversation_history = []  # clear session history; world notes kept
         self.state.save()
 
+        logger.info(
+            f"[Campaign] '{self.state.campaign_name}' session {completed_session} ended — "
+            f"next session will be {self.state.session_number}"
+        )
+
         if self.voice_client and self.voice_client.is_connected():
             await self.voice_client.disconnect()
             self.voice_client = None
+            logger.info("[Voice] Disconnected after campaign stop")
 
         await ctx.send(
             f"**{self.state.campaign_name}** paused after Session {completed_session}. "
@@ -815,6 +858,11 @@ class DMCog(commands.Cog):
             for p in self.state.players.values():
                 ok = await self._send_character_sheet_dm(p, self.state.campaign_name, completed_session)
                 (succeeded if ok else failed).append(p["character_name"])
+
+            if succeeded:
+                logger.info(f"[Session] End-of-session DMs sent to: {', '.join(succeeded)}")
+            if failed:
+                logger.warning(f"[Session] Could not DM (DMs disabled?): {', '.join(failed)}")
 
             lines = []
             if succeeded:
@@ -908,6 +956,7 @@ class DMCog(commands.Cog):
             return
 
         if choice == "none":
+            logger.info(f"[HumanDM] Removed Human DM from '{self.state.campaign_name}' by {ctx.author}")
             self.state.human_dm_id = 0
             self.state.human_dm_name = ""
             self.state.save()
@@ -922,6 +971,7 @@ class DMCog(commands.Cog):
         self.state.human_dm_id = human_dm.id
         self.state.human_dm_name = human_dm.display_name
         self.state.save()
+        logger.info(f"[HumanDM] Assigned {human_dm.display_name} (id={human_dm.id}) to '{self.state.campaign_name}' by {ctx.author}")
         await ctx.send(f"**{human_dm.display_name}** is now the Human DM for **{self.state.campaign_name}**.")
 
     # ─── Human DM private message listener ────────────────────────────────────
@@ -940,6 +990,7 @@ class DMCog(commands.Cog):
         if not note:
             return
 
+        logger.info(f"[HumanDM] Note received from {message.author}: {note!r}")
         self.state.world_notes += f"\n[Human DM] {note}"
         self.state.save()
         await message.channel.send(f"Got it — added to campaign context for **{self.state.campaign_name}**.")
@@ -965,10 +1016,12 @@ class DMCog(commands.Cog):
 
         # ── D&D Beyond URL ────────────────────────────────────────────────────
         if "dndbeyond.com/characters/" in args:
+            logger.info(f"[Register] D&D Beyond import requested by {ctx.author}")
             msg = await ctx.send("Fetching character from D&D Beyond...")
             char_data = await fetch_ddb_character(args)
 
             if char_data is None:
+                logger.warning(f"[Register] D&D Beyond fetch failed for {ctx.author} — URL: {args!r}")
                 await msg.edit(
                     content="Could not fetch that character. "
                             "Make sure the URL is correct and the character sheet is set to **public** on D&D Beyond."
@@ -982,6 +1035,10 @@ class DMCog(commands.Cog):
             self.state.add_player(ctx.author.id, ctx.author.display_name)
             self.state.update_player(ctx.author.id, **char_data)
             self.state.save()
+            logger.info(
+                f"[Register] {ctx.author} registered via D&D Beyond: "
+                f"{char_data['character_name']} ({char_data['race']} {char_data['char_class']} Lv{char_data['level']})"
+            )
 
             p = self.state.get_player(ctx.author.id)
             embed = discord.Embed(
@@ -1020,6 +1077,7 @@ class DMCog(commands.Cog):
             char_class=char_class,
         )
         self.state.save()
+        logger.info(f"[Register] {ctx.author} registered manually: {character_name} ({race} {char_class})")
         await ctx.send(
             f"⚔️ **{character_name}** the {race} {char_class} has joined the party! "
             f"Use `!hp set <max>` to set your HP."
@@ -1035,15 +1093,21 @@ class DMCog(commands.Cog):
 
         if action == "set":
             self.state.update_player(ctx.author.id, max_hp=amount, current_hp=amount)
+            logger.info(f"[HP] {p['character_name']} HP set to {amount}/{amount}")
             await ctx.send(f"❤️ **{p['character_name']}** HP set to {amount}/{amount}")
         elif action == "damage":
             new_hp = max(0, p["current_hp"] - amount)
             self.state.update_player(ctx.author.id, current_hp=new_hp)
+            if new_hp == 0:
+                logger.warning(f"[HP] {p['character_name']} dropped to 0 HP (UNCONSCIOUS)")
+            else:
+                logger.info(f"[HP] {p['character_name']} took {amount} damage — HP: {new_hp}/{p['max_hp']}")
             status = "💀 **UNCONSCIOUS!**" if new_hp == 0 else f"❤️ HP: {new_hp}/{p['max_hp']}"
             await ctx.send(f"🩸 **{p['character_name']}** takes {amount} damage! {status}")
         elif action == "heal":
             new_hp = min(p["max_hp"], p["current_hp"] + amount)
             self.state.update_player(ctx.author.id, current_hp=new_hp)
+            logger.info(f"[HP] {p['character_name']} healed {amount} — HP: {new_hp}/{p['max_hp']}")
             await ctx.send(f"💚 **{p['character_name']}** heals {amount} HP! ❤️ HP: {new_hp}/{p['max_hp']}")
         elif action == "show":
             await ctx.send(f"❤️ **{p['character_name']}** HP: {p['current_hp']}/{p['max_hp']}")

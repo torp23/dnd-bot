@@ -2,8 +2,11 @@
 Fetches and parses character data from the D&D Beyond character API.
 Only works for publicly shared characters (no auth token required).
 """
+import logging
 import re
 import aiohttp
+
+logger = logging.getLogger(__name__)
 
 # Matches both:
 #   https://www.dndbeyond.com/characters/12345678
@@ -47,6 +50,10 @@ def _parse_spells(data: dict) -> tuple[list, dict]:
         if available > 0:
             spell_slots[lvl] = {"max": available, "remaining": max(0, available - used)}
 
+    logger.debug(
+        f"[DDB] Parsed {len(spells_known)} spell(s), "
+        f"{len(spell_slots)} slot level(s)"
+    )
     return spells_known, spell_slots
 
 
@@ -77,6 +84,7 @@ def _parse_features(data: dict) -> list:
                 "recharge": "long",  # default; DnD Beyond doesn't always expose recharge type
             })
 
+    logger.debug(f"[DDB] Parsed {len(features)} limited-use feature(s)")
     return features
 
 
@@ -107,6 +115,11 @@ def parse_character(data: dict) -> dict:
     spells_known, spell_slots = _parse_spells(data)
     class_features = _parse_features(data)
 
+    logger.info(
+        f"[DDB] Parsed character: {name} — {race} {char_class} Lv{level} "
+        f"HP:{current_hp}/{max_hp} spells:{len(spells_known)} features:{len(class_features)}"
+    )
+
     return {
         "character_name": name,
         "race": race,
@@ -128,8 +141,10 @@ async def fetch_ddb_character(url: str) -> dict | None:
     """
     char_id = extract_character_id(url)
     if not char_id:
+        logger.warning(f"[DDB] Could not extract character ID from URL: {url!r}")
         return None
 
+    logger.info(f"[DDB] Fetching character id={char_id}")
     try:
         async with aiohttp.ClientSession(headers=HEADERS) as session:
             async with session.get(
@@ -137,13 +152,19 @@ async def fetch_ddb_character(url: str) -> dict | None:
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as resp:
                 if resp.status != 200:
+                    logger.warning(f"[DDB] Non-200 response for id={char_id}: HTTP {resp.status}")
                     return None
                 payload = await resp.json()
-    except Exception:
+    except asyncio.TimeoutError:
+        logger.error(f"[DDB] Request timed out for id={char_id}")
+        return None
+    except Exception as e:
+        logger.error(f"[DDB] Network error fetching id={char_id}: {e}", exc_info=True)
         return None
 
     char_data = payload.get("data")
     if not char_data:
+        logger.warning(f"[DDB] No 'data' key in response for id={char_id}")
         return None
 
     return parse_character(char_data)

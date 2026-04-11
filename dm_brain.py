@@ -1,11 +1,14 @@
 """
 Interfaces with the Google Gemini API to act as Dungeon Master.
 """
+import logging
 import os
 import re
 import discord
 import google.generativeai as genai
 from game_state import GameState
+
+logger = logging.getLogger(__name__)
 
 # Strips AUTOROLL tags from text before storing in conversation history
 _AUTOROLL_STRIP_RE = re.compile(r'\[AUTOROLL:[^\]]*\]', re.IGNORECASE)
@@ -87,6 +90,8 @@ async def get_dm_response(state: GameState, player_input: str, player_name: str)
     # Add to history and send
     state.add_to_history("user", full_input)
 
+    logger.info(f"[Gemini] Sending input from {player_name}: {player_input[:80]!r}")
+
     try:
         response = model.generate_content(
             contents=state.conversation_history,
@@ -95,8 +100,14 @@ async def get_dm_response(state: GameState, player_input: str, player_name: str)
                 max_output_tokens=512,
             )
         )
-        reply = response.text.strip()
+        reply = (response.text or "").strip()
+        if not reply:
+            logger.warning(f"[Gemini] Empty/blocked response for input from {player_name}")
+            reply = "*(The DM pauses, lost in thought...)*"
+        else:
+            logger.info(f"[Gemini] Response received ({len(reply)} chars)")
     except Exception as e:
+        logger.error(f"[Gemini] API error for input from {player_name}: {e}", exc_info=True)
         reply = f"*(The DM pauses, distracted by an otherworldly force... Error: {e})*"
 
     # Strip the autoroll tag before storing in history so it doesn't pollute future context
@@ -121,6 +132,7 @@ async def get_level_up_info(char_class: str, new_level: int) -> str:
         f"extra attack changes, hit die for HP roll, and anything else mechanical. "
         f"Keep each bullet to one line."
     )
+    logger.info(f"[Gemini] Requesting level-up info: {char_class} → level {new_level}")
     try:
         response = model.generate_content(
             contents=[{"role": "user", "parts": [{"text": prompt}]}],
@@ -129,13 +141,20 @@ async def get_level_up_info(char_class: str, new_level: int) -> str:
                 max_output_tokens=400,
             ),
         )
-        return response.text.strip()
+        info = (response.text or "").strip()
+        if not info:
+            logger.warning(f"[Gemini] Empty level-up response for {char_class} level {new_level}")
+            return "*(No details available)*"
+        logger.info(f"[Gemini] Level-up info received ({len(info)} chars)")
+        return info
     except Exception as e:
+        logger.error(f"[Gemini] Level-up API error for {char_class} level {new_level}: {e}", exc_info=True)
         return f"*(Could not retrieve level-up details: {e})*"
 
 
 async def announce_level_up(channel: discord.TextChannel, p: dict, old_level: int, new_level: int):
     """Post a level-up announcement embed to the given channel."""
+    logger.info(f"[LevelUp] {p['character_name']} ({p['char_class']}) {old_level} → {new_level}")
     info = await get_level_up_info(p["char_class"], new_level)
 
     embed = discord.Embed(
@@ -179,6 +198,11 @@ async def start_session(state: GameState) -> str:
 
     state.add_to_history("user", opener)
 
+    logger.info(
+        f"[Gemini] Starting session {state.session_number} of '{state.campaign_name}' "
+        f"at '{state.current_location}'"
+    )
+
     try:
         response = model.generate_content(
             contents=state.conversation_history,
@@ -189,8 +213,12 @@ async def start_session(state: GameState) -> str:
         )
         reply = (response.text or "").strip()
         if not reply:
+            logger.warning("[Gemini] Empty/blocked response for session opener")
             reply = "*(The session begins, but the DM is momentarily speechless...)*"
+        else:
+            logger.info(f"[Gemini] Session opener received ({len(reply)} chars)")
     except Exception as e:
+        logger.error(f"[Gemini] Session opener API error: {e}", exc_info=True)
         reply = f"*(The DM pauses at the threshold, distracted by an otherworldly force... Error: {e})*"
 
     state.add_to_history("model", reply)

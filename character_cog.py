@@ -3,9 +3,12 @@ Character Cog — spell, slot, class feature, and action economy tracking.
 These constraints are injected into every Gemini prompt so the DM can
 counter players attempting actions their character cannot perform.
 """
+import logging
 import discord
 from discord.ext import commands
 from dm_brain import announce_level_up
+
+logger = logging.getLogger(__name__)
 
 
 def _get_dm_cog(bot):
@@ -62,6 +65,7 @@ class CharacterCog(commands.Cog):
         spells.append({"name": name, "level": level})
         state.save()
         slot_label = "cantrip" if level == 0 else f"level {level}"
+        logger.info(f"[Spell] {p['character_name']} learned {name} ({slot_label})")
         await ctx.send(f"**{p['character_name']}** learned **{name}** ({slot_label}).")
 
     @spell_group.command(name="remove")
@@ -77,6 +81,7 @@ class CharacterCog(commands.Cog):
             return
         spells.remove(match)
         state.save()
+        logger.info(f"[Spell] {p['character_name']} forgot {name}")
         await ctx.send(f"**{p['character_name']}** forgot **{name}**.")
 
     @spell_group.command(name="show")
@@ -146,6 +151,10 @@ class CharacterCog(commands.Cog):
 
         slot["remaining"] -= 1
         state.save()
+        logger.info(
+            f"[Spell] {p['character_name']} cast {spell_name} (slot lv{use_level}) — "
+            f"{slot['remaining']}/{slot['max']} remaining"
+        )
         await ctx.send(
             f"**{p['character_name']}** casts **{spell_name}** using a level {use_level} slot. "
             f"({slot['remaining']}/{slot['max']} remaining)"
@@ -293,6 +302,10 @@ class CharacterCog(commands.Cog):
             return
         feat["remaining"] -= 1
         state.save()
+        logger.info(
+            f"[Feature] {p['character_name']} used {name} — "
+            f"{feat['remaining']}/{feat['max_uses']} remaining"
+        )
         await ctx.send(f"**{name}** used. ({feat['remaining']}/{feat['max_uses']} remaining)")
 
     @feature_group.command(name="restore")
@@ -459,6 +472,10 @@ class CharacterCog(commands.Cog):
         state.save()
 
         rest_label = "Short Rest" if rest_type == "short" else "Long Rest"
+        logger.info(
+            f"[Rest] {p['character_name']} took a {rest_label} — "
+            f"effects: {', '.join(effects) if effects else 'none'}"
+        )
         desc = "\n".join(f"• {e}" for e in effects) if effects else "Nothing to restore."
         embed = discord.Embed(
             title=f"{p['character_name']} takes a {rest_label}",
@@ -493,6 +510,7 @@ class CharacterCog(commands.Cog):
         p["level"] = new_level
         state.save()
 
+        logger.info(f"[Level] {p['character_name']} levelled up: {old_level} → {new_level}")
         dm_cog = _get_dm_cog(self.bot)
         channel = (dm_cog.log_channel if dm_cog else None) or ctx.channel
         await announce_level_up(channel, p, old_level, new_level)
@@ -517,10 +535,12 @@ class CharacterCog(commands.Cog):
         state.save()
 
         if new_level > old_level:
+            logger.info(f"[Level] {p['character_name']} set from {old_level} → {new_level} (level-up)")
             dm_cog = _get_dm_cog(self.bot)
             channel = (dm_cog.log_channel if dm_cog else None) or ctx.channel
             await announce_level_up(channel, p, old_level, new_level)
         else:
+            logger.info(f"[Level] {p['character_name']} set from {old_level} → {new_level} (level-down)")
             await ctx.send(
                 f"**{p['character_name']}** set to level {new_level} (from {old_level})."
             )
