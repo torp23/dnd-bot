@@ -443,9 +443,12 @@ class CharacterCog(commands.Cog):
 
         # Long rest: restore all spell slots and reset HP to max
         if rest_type == "long":
+            slots_needed_restore = any(
+                s["remaining"] < s["max"] for s in p.get("spell_slots", {}).values()
+            )
             for s in p.get("spell_slots", {}).values():
                 s["remaining"] = s["max"]
-            if effects or any(s["remaining"] < s["max"] for s in p.get("spell_slots", {}).values()):
+            if slots_needed_restore:
                 effects.append("all spell slots restored")
             p["current_hp"] = p["max_hp"]
             effects.append(f"HP restored to {p['max_hp']}")
